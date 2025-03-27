@@ -1,0 +1,119 @@
+---
+
+- name: Configure journalctl - SystemMaxUse 250M
+  lineinfile:
+    path: /etc/systemd/journald.conf
+    regexp: '^SystemMaxUse='
+    line: 'SystemMaxUse=250M'
+    create: yes
+  notify: Restart systemd-journald
+
+- name: Configure journalctl - SystemMaxFileSize 50M
+  lineinfile:
+    path: /etc/systemd/journald.conf
+    regexp: '^SystemMaxFileSize='
+    line: 'SystemMaxFileSize=50M'
+    create: yes
+  notify: Restart systemd-journald
+
+- name: Install auditd o Debian/Ubuntu
+  apt:
+     name: auditd
+     state: present
+  when: ansible_os_family == "Debian"
+
+- name: Install auditd on CentOS/Oracle
+  yum:
+     name: audit
+     state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Configure auditd on WEB_servers_group
+  lineinfile:
+     path: /etc/audit/rules.d/audit.rules
+     line: "{{ item }}"
+     create: yes
+  loop:
+     - "-D"
+     - "-b 8192"
+     - "-w /etc/group -p rwa"
+     - "-w /etc/passwd -p rwa"
+     - "-w /etc/shadow -p rwa"
+     - "-w /etc/sudoers -p wa"
+     - "-w /etc/fstab -p wa"
+     - "-w /etc/crontab -p wa"
+     - "-w /etc/cron.d/ -p wa"
+     - "-w /etc/cron.daily/ -p wa -k wa"
+     - "-w /etc/filebeat/ -p wa"
+     - "-w /etc/ssh/ -p wa"
+     - "-w /etc/audit/ -p wa"
+     - "-w /etc/nginx/ -p wa"
+     - "## This determine how long to wait in burst of events"
+     - "--backlog_wait_time 60000"
+     - "## Set failure mode to syslog"
+     - "-f 1"
+  notify:
+     - Restart auditd
+#     - Apply sysctl settings
+     - Load auditd rules
+  when: "'WEB_servers_group' in group_names"
+
+- name: Configure auditd on DB_servers_group
+  lineinfile:
+     path: /etc/audit/rules.d/audit.rules
+     line: "{{ item }}"
+     create: yes
+  loop:
+     - "-D"
+     - "-b 8192"
+     - "-w /etc/group -p rwa"
+     - "-w /etc/passwd -p rwa"
+     - "-w /etc/shadow -p rwa"
+     - "-w /etc/sudoers -p wa"
+     - "-w /etc/fstab -p wa"
+     - "-w /etc/crontab -p wa"
+     - "-w /etc/cron.d/ -p wa"
+     - "-w /etc/cron.daily/ -p wa -k wa"
+     - "-w /etc/filebeat/ -p wa"
+     - "-w /etc/ssh/ -p wa"
+     - "-w /etc/audit/ -p wa"
+     - "-w /etc/mysql/ -p wa"
+     - "## This determine how long to wait in burst of events"
+     - "--backlog_wait_time 60000"
+     - "## Set failure mode to syslog"
+     - "-f 1"
+  notify:
+     - Restart auditd 
+#     - Apply sysctl settings
+     - Load auditd rules
+  when: "'DB_servers_group' in group_names"
+
+- name: Configure auditd on servers_group
+  lineinfile:
+     path: /etc/audit/rules.d/audit.rules
+     line: "{{ item }}"
+     create: yes
+  loop:
+     - "-D"
+     - "-b 8192"
+     - "-w /etc/group -p rwa"
+     - "-w /etc/passwd -p rwa"
+     - "-w /etc/shadow -p rwa"
+     - "-w /etc/sudoers -p wa"
+     - "-w /etc/fstab -p wa"
+     - "-w /etc/crontab -p wa"
+     - "-w /etc/cron.d/ -p wa"
+     - "-w /etc/cron.daily/ -p wa -k wa"
+     - "-w /etc/filebeat/ -p wa"
+     - "-w /etc/ssh/ -p wa"
+     - "-w /etc/audit/ -p wa"
+     - "## This determine how long to wait in burst of events"
+     - "--backlog_wait_time 60000"
+     - "## Set failure mode to syslog"
+     - "-f 1"
+  notify:
+     - Restart auditd
+#     - Apply sysctl settings
+     - Load auditd rules
+  when: "'servers_group' in group_names"
+

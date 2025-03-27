@@ -1,0 +1,41 @@
+---
+- name: Configuring auditd
+  hosts: servers_group,WEB_servers_group,DB_servers_group
+  become: yes
+  gather_facts: yes
+  vars_files:
+    - /root/SA-Ansible/vars/params.yml
+    - /root/SA-Ansible/vars/secrets.yml
+  tasks:
+  - name: Test connection
+    ping:
+
+  roles:
+    - configuring_auditd
+    - configuring_ELK
+
+  handlers:
+    - name: Restart systemd-journald
+      systemd:
+        name: systemd-journald
+        state: restarted
+    - name: Restart auditd
+      systemd:
+        name: auditd
+        state: restarted
+        enabled: yes
+#    - name: Apply sysctl settings
+#      command: sysctl -p     
+    - name: Load auditd rules
+      ansible.builtin.command: augenrules --load
+      changed_when: false
+      ignore_errors: yes
+    - name: Restart filebeat
+      systemd:
+        name: filebeat
+        state: restarted
+        enabled: yes
+    - name: Restart cron
+      service:
+        name: cron
+        state: restarted

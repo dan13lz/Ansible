@@ -1,0 +1,202 @@
+
+# Install filebeat on Debian/Ubuntu
+- name: Install gpg on Ubuntu/Debian
+  apt:
+    name: gnupg
+    state: present
+    update_cache: yes
+  ignore_errors: yes
+  when: ansible_os_family == "Debian"
+
+- name: Add Elasticsearch 8.x repository for Debian/Ubuntu
+  apt_repository:
+     repo: 'deb [trusted=yes] https://mirror.yandex.ru/mirrors/elastic/8/ stable main'
+     state: present
+     filename: elastic-8.x.list
+  when: ansible_os_family == "Debian"
+
+- name: Update apt cache for Debian/Ubuntu
+  apt:
+     update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: Install Filebeat on Debian/Ubuntu
+  apt:
+     name: filebeat
+     state: present
+  when: ansible_os_family == "Debian"
+
+# Install fileabeat on CentOS/Oracle
+- name: Install gpg on CentOS/Oracle
+  yum:
+    name: gnupg
+    state: present
+    update_cache: yes
+  ignore_errors: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Import Elasticsearch GPG key for CentOS/Oracle Linux
+  rpm_key:
+     key: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+     state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Add Elasticsearch 8.x repository for CentOS/Oracle Linux
+  yum_repository:
+     name: elasticsearch-8.x
+     description: Elasticsearch repository for 8.x packages
+     baseurl: https://mirror.yandex.ru/mirrors/elastic/8.x/yum
+     gpgcheck: yes
+     gpgkey: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+     enabled: yes
+     state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Update yum cache for CentOS/Oracle Linux
+  yum:
+     update_cache: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Install Filebeat on CentOS/Oracle Linux
+  yum:
+     name: filebeat
+     state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Check hosts configuration in filebeat.yml
+  ansible.builtin.shell: |
+     grep -q 'hosts: \["elk\.renlife\.com:5044"\]' /etc/filebeat/filebeat.yml
+  ignore_errors: yes
+  register: grep_result
+  changed_when: false
+
+# if hosts setting not exists
+- name: Configure filebeat.yml on Debian/Ubuntu
+  template:
+    src: "{{ playbook_dir }}/templates/filebeat.yml.debian.j2"
+    dest: /etc/filebeat/filebeat.yml
+  notify: Restart filebeat
+  when: 
+     - ansible_os_family == "Debian"
+     - grep_result.rc != 0
+
+# if hosts setting not exists
+- name: Configure filebeat.yml on CentOS/Oracle
+  template:
+    src: "{{ playbook_dir }}/templates/filebeat.yml.redhat.j2"
+    dest: /etc/filebeat/filebeat.yml
+  notify: Restart filebeat service
+  when: 
+     - ansible_os_family == "RedHat"
+     - grep_result.rc != 0
+
+- name: Add ignore_older after paths in Filebeat config
+  ansible.builtin.lineinfile:
+    path: /etc/filebeat/filebeat.yml
+    insertbefore: '^  paths:'
+    line: '  ignore_older: 48h'
+    state: present
+  notify: Restart filebeat
+
+- name: Check dpkg.log in filebeat inputs
+  lineinfile:
+    path: /etc/filebeat/filebeat.yml
+    insertafter: '^  paths:'
+    line: '    - /var/log/dpkg.log'
+    state: present
+    regexp: '^\s+- /var/log/dpkg\.log$'
+  notify: Restart filebeat
+  when: ansible_os_family == "Debian"
+
+- name: Check user.log in filebeat inputs
+  lineinfile:
+    path: /etc/filebeat/filebeat.yml
+    insertafter: '^  paths:'
+    line: '    - /var/log/user.log'
+    state: present
+    regexp: '^\s+- /var/log/user\.log$'
+  notify: Restart filebeat
+  when: ansible_os_family == "Debian"
+
+- name: Check auth.log in filebeat inputs
+  lineinfile:
+    path: /etc/filebeat/filebeat.yml
+    insertafter: '^  paths:'
+    line: '    - /var/log/auth.log'
+    state: present
+    regexp: '^\s+- /var/log/auth\.log$'
+  notify: Restart filebeat
+  when: ansible_os_family == "Debian"
+
+- name: Check aptitude logs in filebeat inputs
+  lineinfile:
+    path: /etc/filebeat/filebeat.yml
+    insertafter: '^  paths:'
+    line: '    - /var/log/aptitude'
+    state: present
+    regexp: '^\s+- /var/log/aptitude$'
+  notify: Restart filebeat
+  when: ansible_os_family == "Debian"
+
+- name: Check yum.log in filebeat inputs
+  lineinfile:
+    path: /etc/filebeat/filebeat.yml
+    insertafter: '^  paths:'
+    line: '    - /var/log/yum.log'
+    state: present
+    regexp: '^\s+- /var/log/yum\.log$'
+  notify: Restart filebeat
+  when: ansible_os_family == "RedHat"
+
+- name: Check secure in filebeat inputs
+  lineinfile:
+    path: /etc/filebeat/filebeat.yml
+    insertafter: '^  paths:'
+    line: '    - /var/log/secure'
+    state: present
+    regexp: '^\s+- /var/log/secure$'
+  notify: Restart filebeat  
+  when: ansible_os_family == "RedHat"
+
+- name: Backup file common-session-noninteractive
+  copy:
+      src: /etc/pam.d/common-session-noninteractive
+      dest: /etc/pam.d/common-session-noninteractive.bak
+      remote_src: yes
+  when: ansible_os_family == "Debian"
+
+- name: Ensure the line is inserted above 'session required pam_unix.so'
+  lineinfile:
+       path: /etc/pam.d/common-session-noninteractive
+       insertbefore: '^.*session\s+required\s+pam_unix\.so'
+       line: 'session [success=1 default=ignore] pam_succeed_if.so service in cron quiet use_uid'
+       regexp: '^session\s+\[success=1 default=ignore\]\s+pam_succeed_if\.so service in cron quiet use_uid'
+       state: present
+  notify: Restart cron
+  when: ansible_os_family == "Debian"
+
+- name: Enable Filebeat Nginx module
+  command: filebeat modules enable nginx
+  args:
+       creates: /etc/filebeat/modules.d/nginx.yml
+  notify: Restart filebeat
+  when: "'WEB_servers_group' in group_names"
+
+- name: Enable Filebeat MySQL module
+  command: filebeat modules enable mysql
+  args:
+       creates: /etc/filebeat/modules.d/mysql.yml
+  notify: Restart filebeat
+  when: "'DB_servers_group' in group_names"
+
+- name: Check cron is installed (Debian/Ubuntu)
+  apt:
+      name: cron
+      state: present
+  when: ansible_os_family == "Debian" 
+
+- name: Check cron is installed (RedHat/CentOS)
+  yum:
+      name: cronie
+      state: present
+  when: ansible_os_family == "RedHat"
