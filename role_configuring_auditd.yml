@@ -1,5 +1,51 @@
 ---
 
+- name: Add CheckPoint SSL_INSPECT.crt Debian/Ubuntu
+  template:
+    src: "{{ playbook_dir }}/templates/SSL_INSPECT.crt"
+    dest: /usr/local/share/ca-certificates/SSL_INSPECT.crt
+    mode: '0644'
+    owner: root
+    group: root
+  register: cert_added
+  when: ansible_os_family == "Debian"
+
+- name: Update CA certificates (if cert was added)
+  command: update-ca-certificates -v
+  when:
+    - ansible_os_family == "Debian"
+    - cert_added is changed
+  changed_when: false
+
+- name: Remove buster-backports from sources.list
+  ansible.builtin.replace:
+    path: /etc/apt/sources.list
+    regexp: '^deb.*buster-backports.*'
+    replace: ''
+
+- name: Find all APT config files
+  ansible.builtin.find:
+    paths:
+      - /etc/apt
+    patterns:
+      - 'apt.conf'
+      - '*.conf'
+    use_regex: no
+    file_type: file
+  register: apt_config_files
+  when: ansible_os_family == 'Debian'
+
+- name: Comment out APT proxy in all found config files
+  ansible.builtin.replace:
+    path: "{{ item.path }}"
+    regexp: '^(Acquire::http::Proxy\s+"http://10\.10\.252\.215:8080";)$'
+    replace: '# \1'
+    backup: yes
+  loop: "{{ apt_config_files.files }}"
+  when: 
+    - ansible_os_family == 'Debian'
+    - "'apt.conf' in item.path or '.conf' in item.path"
+
 - name: Configure journalctl - SystemMaxUse 250M
   lineinfile:
     path: /etc/systemd/journald.conf
